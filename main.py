@@ -1,14 +1,17 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict
 
 app = FastAPI()
 
 
 class Request(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     old_price: float
     new_price: float
-    days_remaining: int
-    days_in_actual_month: int
+    days_remaining: float
+    days_in_actual_month: float
     spec: str
 
 
@@ -19,17 +22,28 @@ def root():
 
 @app.post("/charge")
 def charge(req: Request):
-    difference = req.new_price - req.old_price
+    spec = req.spec.strip().lower()
 
-    if req.spec == "v1":
-        result = difference * (req.days_remaining / 30)
+    diff = float(req.new_price) - float(req.old_price)
 
-    elif req.spec == "v2":
-        result = difference * (
-            req.days_remaining / req.days_in_actual_month
+    if spec == "v1":
+        charge = diff * (float(req.days_remaining) / 30.0)
+
+    elif spec == "v2":
+        if req.days_in_actual_month == 0:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "days_in_actual_month cannot be zero"},
+            )
+        charge = diff * (
+            float(req.days_remaining)
+            / float(req.days_in_actual_month)
         )
 
     else:
-        return {"error": "Unknown spec"}
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid spec"},
+        )
 
-    return {"charge": result}
+    return {"charge": float(charge)}
